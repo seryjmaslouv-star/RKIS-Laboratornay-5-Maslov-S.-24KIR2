@@ -1,20 +1,25 @@
 using System.Timers;
 
 System.Timers.Timer timer = new System.Timers.Timer();
-bool quit = false;  //бесконечный цикл
-int vx; //вектор по икс и игрек
+bool quit = false;
+bool gameOver = false;
+int vx;
 int vy;
-int headx;  //голова змеи
+int headx;
 int heady;
-int[,] GameField;   //игровое поле
-int w = 80, h = 40; //ширина и высота поля
-int score = 0;  //счёт
-int lifes = 3;  //кол-во жизней 
-int apples; //кол-во яблок
-int level = 0;  //номер уровня
+int[,] GameField;
+int w = 50, h = 25; 
+int score = 0;
+int lifes = 3;
+int apples;
+int level = 1; 
 
-void SplashScreen() //загрузочный экран
+void SplashScreen() //заставка
 {
+    Console.Clear();
+    Console.SetWindowSize(80, 30);
+    Console.SetBufferSize(80, 30);
+
     string[] s = new string[13];
     s[0] = "  sss   n    n   aa  k   k   eeeeee";
     s[1] = " s   s  n    n  a  a k  k    e     ";
@@ -30,49 +35,78 @@ void SplashScreen() //загрузочный экран
     s[11] = "Агейкин А.Н. - технический писатель";
     s[12] = "Суетов К.В. - тестировщик";
 
-    Console.ForegroundColor = ConsoleColor.Green; //цвет символов
+    Console.ForegroundColor = ConsoleColor.Green;
     for (int i = 0; i < s.Length; i++)
     {
         for (int j = 0; j < s[i].Length; j++)
         {
-            Console.SetCursorPosition(j + 10, i + 10); //позиция курсора: j - горизонталь, i - вертикаль
+            Console.SetCursorPosition(j + 10, i + 5);
             Console.Write(s[i][j]);
-            System.Console.Beep(2000, 1); //звук печати
-            System.Threading.Thread.Sleep(20); //печать с задержкой
+            System.Console.Beep(1000, 1);
+            System.Threading.Thread.Sleep(20);
         }
     }
-    Console.SetCursorPosition(30, 25);
+    Console.SetCursorPosition(25, 22);
     Console.Write("Нажмите любую клавишу чтобы начать");
     Console.ResetColor();
+
+    Console.ReadKey();
+
+    // Возвращаем размер окна для игры
+    Console.Clear();
+    Console.SetWindowSize(w + 1, h + 6);
+    Console.SetBufferSize(w + 1, h + 6);
 }
 
-void Init()
+void Init() // инициализация
 {
-    Console.CursorVisible = false; //отсутсвие курсора
-    Console.SetWindowSize(w + 1, h + 3);    // размер экрана
-    Console.SetBufferSize(w + 1, h + 3);
+    Console.CursorVisible = false;
+    Console.SetWindowSize(w + 1, h + 6);
+    Console.SetBufferSize(w + 1, h + 6);
 }
 
-void Load(int level = 1)
+void Load(int currentLevel) // загрузка уровня
 {
-    vx = 0; //первоначальное направление
-    vy = 1;
-    headx = w / 2; //положение головы
-    heady = h / 2;
+    // Полная очистка игрового поля
     GameField = new int[w + 1, h + 1];
-    GameField[headx, heady] = 1; //голова змеи
-    Random random = new Random();
-    apples = level + 1;
 
-    for (int i = 0; i < apples; i++)  //разбрасываем яблоки
+    vx = 0;
+    vy = 1;
+    headx = w / 2;
+    heady = h / 2;
+
+    // Инициализация всего поля нулями
+    for (int i = 0; i <= w; i++)
     {
-        GameField[random.Next(1, w), random.Next(1, h)] = -1;
+        for (int j = 0; j <= h; j++)
+        {
+            GameField[i, j] = 0;
+        }
     }
 
-    for (int i = 0; i <= w; i++) //создание бардюров 
+    GameField[headx, heady] = 1;
+
+    Random random = new Random();
+    apples = currentLevel + 1;
+    int applesPlaced = 0;
+
+    // Разбрасываем яблоки, избегая положения головы
+    while (applesPlaced < apples)
+    {
+        int x = random.Next(1, w);
+        int y = random.Next(1, h);
+        if (GameField[x, y] == 0)
+        {
+            GameField[x, y] = -1;
+            applesPlaced++;
+        }
+    }
+
+    // Создание бордюров
+    for (int i = 0; i <= w; i++)
     {
         GameField[i, 0] = 10000;
-        GameField[i, h] = 10000; 
+        GameField[i, h] = 10000;
     }
 
     for (int i = 0; i <= h; i++)
@@ -82,94 +116,106 @@ void Load(int level = 1)
     }
 }
 
-void Update() 
+bool Update()
 {
-    headx += vx; //сдвигаем голову змеи
-    heady += vy;
-    if (Collision()) return; // если произошло столкновение
+    //новая позиция головы
+    int newHeadX = headx + vx; 
+    int newHeadY = heady + vy;
 
-    if (GameField[headx, heady] < 0)
+    // Проверка столкновения со стенами
+    if (newHeadX < 1 || newHeadX >= w || newHeadY < 1 || newHeadY >= h)
+    {
+        return true; // Столкновение со стеной
+    }
+
+    // Проверка столкновения с собой
+    if (GameField[newHeadX, newHeadY] > 0 && GameField[newHeadX, newHeadY] != 10000)
+    {
+        return true; // Столкновение с телом
+    }
+
+    // Двигаем голову
+    headx = newHeadX;
+    heady = newHeadY;
+
+    // Проверка на яблоко
+    if (GameField[headx, heady] == -1)
     {
         score++;
         apples--;
+        GameField[headx, heady] = 1;
+
+        // Увеличиваем тело
+        Next(headx - vx, heady - vy, 1, 1);
+
         if (apples == 0)
         {
-            quit = true;
-            return;
+            quit = true; // Уровень пройден
+            return false;
         }
-        GameField[headx, heady] = 1;
-        Next(headx - vx, heady - vy, 1, 1);
     }
     else
+    {
+        // Обычное движение - удаляем хвост и добавляем голову
         Next(headx, heady, 1);
+    }
+
+    return false;
 }
 
-bool Collision() //обработчик столкновений
+void Next(int tailX, int tailY, int n, int p = 0) // управление хвостом
 {
-    if (GameField[headx, heady] > 0) //голова наехала сама на себя
-        quit = true;
-    if (headx < 1 || headx >= w || heady < 1 || heady >= h) //голова вышла за стену
-        quit = true; 
-    return quit;
-}
+    if (tailX < 0 || tailX > w || tailY < 0 || tailY > h) return;
 
-void Next(int tailX, int tailY, int n, int p = 0) //рекурсивный метод рисования хвоста
-{
     GameField[tailX, tailY] = n + p;
 
-    if (GameField[tailX + 1, tailY] == n + p) Next(tailX + 1, tailY, n + 1, p);
-    else
-        if (GameField[tailX - 1, tailY] == n + p) Next(tailX - 1, tailY, n + 1, p);
-    else
-        if (GameField[tailX, tailY - 1] == n + p) Next(tailX, tailY - 1, n + 1, p);
-    else
-        if (GameField[tailX, tailY + 1] == n + p) Next(tailX, tailY + 1, n + 1, p);
-    else
-        if (p == 0) GameField[tailX, tailY] = 0;
+    if (tailX + 1 <= w && GameField[tailX + 1, tailY] == n + p)
+        Next(tailX + 1, tailY, n + 1, p);
+    else if (tailX - 1 >= 0 && GameField[tailX - 1, tailY] == n + p)
+        Next(tailX - 1, tailY, n + 1, p);
+    else if (tailY - 1 >= 0 && GameField[tailX, tailY - 1] == n + p)
+        Next(tailX, tailY - 1, n + 1, p);
+    else if (tailY + 1 <= h && GameField[tailX, tailY + 1] == n + p)
+        Next(tailX, tailY + 1, n + 1, p);
+    else if (p == 0)
+        GameField[tailX, tailY] = 0;
 }
 
-void PrintGameField()
+void PrintGameField() // отрисовка
 {
-    for (int y = 0; y <= h; y++) //обработка строчек
-        for (int x = 0; x <= w; x++) //обработка столбцов
+    for (int y = 0; y <= h; y++)
+    {
+        for (int x = 0; x <= w; x++)
         {
-            Console.SetCursorPosition(x, y + 1);
+            Console.SetCursorPosition(x, y + 2);
 
-            switch (GameField[x, y])
-            {
-                case 0:
-                    Console.Write(' '); //заполнитель
-                    break;
-                case -1:
-                    Console.Write('&'); //яблоки
-                    break;
-                case 1:
-                    Console.Write('O'); // голова змеи
-                    break;
-                default:
-                    if (GameField[x, y] > 0)
-                        Console.Write('o'); // тело змеи
-                    else
-                        Console.Write('█'); // стены
-                    break;
-            }
+            if (GameField[x, y] == 0)
+                Console.Write(' ');
+            else if (GameField[x, y] == -1)
+                Console.Write('&');
+            else if (GameField[x, y] == 1)
+                Console.Write('O');
+            else if (GameField[x, y] > 0 && GameField[x, y] < 10000)
+                Console.Write('o');
+            else if (GameField[x, y] == 10000)
+                Console.Write('█');
+            else
+                Console.Write(' ');
         }
-    Console.SetCursorPosition(10, 0);
-    Console.Write($"Уровень:{level} Счёт:{score} Кол-во жизней:{lifes} Кол-во яблок:{apples}");
+    }
+    Console.SetCursorPosition(5, 0);
+    Console.Write($"Уровень:{level} Счёт:{score} Жизни:{lifes} Яблок:{apples}    ");
 }
 
 void KeyboardUpdate()
 {
     if (Console.KeyAvailable)
     {
-        ConsoleKey key = Console.ReadKey(true).Key; //считываем нажатую клавишу
-        System.Diagnostics.Debug.WriteLine(key);
-        System.Diagnostics.Debug.WriteLine("X=" + headx + " Y=" + heady + " VX=" + vx + " VY=" + vy);
-        Console.Title = DateTime.Now.ToLongTimeString();
-        switch (key) // в зависимости от нажатой клавиши
+        ConsoleKey key = Console.ReadKey(true).Key;
+        switch (key)
         {
             case ConsoleKey.LeftArrow:
-                if (vx != 1) // запрет движения назад
+                if (vx != 1)
                 {
                     vx = -1;
                     vy = 0;
@@ -198,28 +244,77 @@ void KeyboardUpdate()
                 break;
             case ConsoleKey.Escape:
                 timer.Stop();
+                gameOver = true;
                 quit = true;
                 break;
         }
     }
 }
 
+// Основная программа
 Init();
 SplashScreen();
-Console.ReadKey();
-while (lifes > 0)
+
+while (lifes > 0 && !gameOver)
 {
-    Load(++level);
+    Load(level);
     PrintGameField();
     quit = false;
+    bool collision = false;
+    bool levelComplete = false;
 
-    while (!quit)
+    while (!quit && !gameOver) // основной цикл
     {
         KeyboardUpdate();
-        Update();
-        PrintGameField();
-        System.Threading.Thread.Sleep(150); //задержка для движения
 
+        if (Update()) // Если столкновение
+        {
+            collision = true;
+            quit = true;
+        }
+
+        PrintGameField();
+        System.Threading.Thread.Sleep(130);
     }
-    lifes--;
+
+    if (collision) //обработка результата
+    {
+        lifes--;
+        if (lifes > 0)
+        {
+            // Очищаем экран и показываем сообщение о потере жизни
+            Console.SetCursorPosition(w / 2 - 15, h / 2 + 2);
+            Console.Write($"Потеряна жизнь! Осталось: {lifes}");
+            System.Threading.Thread.Sleep(1500);
+            // Очищаем сообщение
+            Console.SetCursorPosition(w / 2 - 15, h / 2 + 2);
+            Console.Write(new string(' ', 30));
+
+            // Перезагружаем тот же уровень
+        }
+    }
+    else if (apples == 0 && !collision)
+    {
+        levelComplete = true;
+        // Показываем сообщение о переходе на следующий уровень
+        Console.SetCursorPosition(w / 2 - 12, h / 2 + 2);
+        Console.Write($"Уровень {level} пройден!");
+        System.Threading.Thread.Sleep(1000);
+        Console.SetCursorPosition(w / 2 - 12, h / 2 + 2);
+        Console.Write(new string(' ', 25));
+
+        // Увеличиваем уровень при успешном прохождении
+        level++;
+    }
 }
+
+if (!gameOver)
+{
+    Console.Clear();
+    Console.SetCursorPosition(w / 2 - 10, h / 2 + 2);
+    Console.WriteLine("ИГРА ОКОНЧЕНА!");
+    Console.SetCursorPosition(w / 2 - 12, h / 2 + 3);
+    Console.WriteLine($"Ваш счёт: {score}");
+    Console.ReadKey();
+}
+
